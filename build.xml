@@ -12,7 +12,8 @@
     support JDK 1.4.
 -->
 
-<project name="Rhino" default="help" basedir=".">
+<project name="Rhino" default="help" basedir="."
+         xmlns:artifact="antlib:org.apache.maven.artifact.ant">
 
   <target name="properties">
     <!-- Allow user to override default settings from build.properties -->
@@ -25,6 +26,7 @@
 
     <property name="dist.file" value="rhino${version}.zip"/>
     <property name="dist.source-only-zip" value="rhino${version}-sources.zip"/>
+    <property name="dist.javadoc-only-zip" value="rhino${version}-javadoc.zip"/>
 
     <property file="apiClasses.properties"/>
     <property name="xmlimplsrc-build-file"
@@ -33,6 +35,17 @@
     <available property="xmlimplsrc-present?"
                file="${xmlimplsrc-build-file}" />
 
+    <!-- defined maven snapshots and staging repository id and url -->
+    <property name="ossrh-snapshots-repository-url"
+              value="https://oss.sonatype.org/content/repositories/snapshots/" />
+    <property name="ossrh-staging-repository-url"
+              value="https://oss.sonatype.org/service/local/staging/deploy/maven2/" />
+    <!-- there server id in the Maven settings.xml -->
+    <property name="ossrh-server-id" value="ossrh" />
+
+    <property name="jar" value="${dist.dir}/${rhino.jar}" />
+    <property name="sources-jar" value="${dist.source-only-zip}" />
+    <property name="javadoc-jar" value="${dist.javadoc-only-zip}" />
   </target>
 
   <target name="init" depends="properties">
@@ -217,6 +230,51 @@
   <target name="all" depends="deepclean,compile-all,junit-all,dist">
   </target>
 
+  <target name="deploy" depends="dist, javadoc-zip, source-zip" description="deploy snapshot to Maven repository">
+    <artifact:mvn>
+      <arg value="org.apache.maven.plugins:maven-deploy-plugin:2.6:deploy-file" />
+      <arg value="-Durl=${ossrh-snapshots-repository-url}" />
+      <arg value="-DrepositoryId=${ossrh-server-id}" />
+      <arg value="-DpomFile=pom.xml" />
+      <arg value="-Dfile=${jar}" />
+    </artifact:mvn>
+  </target>
+
+  <!-- before this, update project version (both build.xml and pom.xml) from SNAPSHOT to RELEASE -->
+  <target name="stage" depends="dist, javadoc-zip, source-zip" description="deploy release version to Maven staging repository">
+    <!-- sign and deploy the main artifact -->
+    <artifact:mvn>
+      <arg value="org.apache.maven.plugins:maven-gpg-plugin:1.3:sign-and-deploy-file" />
+      <arg value="-Durl=${ossrh-staging-repository-url}" />
+      <arg value="-DrepositoryId=${ossrh-server-id}" />
+      <arg value="-DpomFile=pom.xml" />
+      <arg value="-Dfile=${jar}" />
+      <arg value="-Possrh" />
+    </artifact:mvn>
+
+    <!-- sign and deploy the sources artifact -->
+    <artifact:mvn>
+      <arg value="org.apache.maven.plugins:maven-gpg-plugin:1.3:sign-and-deploy-file" />
+      <arg value="-Durl=${ossrh-staging-repository-url}" />
+      <arg value="-DrepositoryId=${ossrh-server-id}" />
+      <arg value="-DpomFile=pom.xml" />
+      <arg value="-Dfile=${sources-jar}" />
+      <arg value="-Dclassifier=sources" />
+      <arg value="-Possrh" />
+    </artifact:mvn>
+
+    <!-- sign and deploy the javadoc artifact -->
+    <artifact:mvn>
+      <arg value="org.apache.maven.plugins:maven-gpg-plugin:1.3:sign-and-deploy-file" />
+      <arg value="-Durl=${ossrh-staging-repository-url}" />
+      <arg value="-DrepositoryId=${ossrh-server-id}" />
+      <arg value="-DpomFile=pom.xml" />
+      <arg value="-Dfile=${javadoc-jar}" />
+      <arg value="-Dclassifier=javadoc" />
+      <arg value="-Possrh" />
+    </artifact:mvn>
+  </target>
+
   <target name="dist" depends="deepclean,jar,retrojar,copy-all,javadoc">
     <delete file="${dist.file}" />
     <zip destfile="${dist.file}">
@@ -224,14 +282,25 @@
     </zip>
   </target>
 
+  <target name="javadoc-zip" depends="javadoc">
+    <delete file="${dist.javadoc-only-zip}" />
+    <zip destfile="${dist.javadoc-only-zip}">
+      <zipfileset prefix="${dist.name}" dir="${dist.dir}/javadoc">
+        <!--<include name="javadoc/**"/>-->
+      </zipfileset>
+    </zip>
+  </target>
+
   <target name="source-zip" depends="copy-source,copy-examples,javadoc">
     <delete file="${dist.source-only-zip}" />
     <zip destfile="${dist.source-only-zip}">
-      <zipfileset prefix="${dist.name}" dir="${dist.dir}">
+      <zipfileset prefix="${dist.name}" dir="${dist.dir}/src">
+<!--
         <include name="*src/**"/>
         <include name="build.xml"/>
         <include name="*.properties"/>
         <include name="examples/**"/>
+-->
       </zipfileset>
     </zip>
   </target>
